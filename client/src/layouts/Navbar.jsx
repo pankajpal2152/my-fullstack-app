@@ -1,4 +1,3 @@
-// src/layouts/Navbar.jsx
 import React, { useState, useEffect, useRef } from 'react';
 
 // --- STRICT LOCAL API URL CONFIGURATION ---
@@ -27,10 +26,11 @@ const Navbar = () => {
         if (userStr) {
             const user = JSON.parse(userStr);
 
-            // 2. Fetch their specific profile image from the LOCAL database
+            // 2. Fetch their specific profile image from the LOCAL database (Now pointing to asthadidireginfo via /asthadidi)
             const fetchProfileImage = async () => {
                 try {
-                    const res = await fetch(`${API_BASE_URL}/RegInfo`);
+                    // UPDATED: Fetching from the new asthadidi endpoint
+                    const res = await fetch(`${API_BASE_URL}/asthadidi`);
                     const data = await res.json();
 
                     // Match the record created by this user's email
@@ -152,6 +152,21 @@ const Navbar = () => {
             alignItems: 'center',
             fontWeight: '500',
             transition: 'background-color 0.2s'
+        },
+        // NEW STYLE FOR DIRECT LOGOUT BUTTON
+        logoutBtn: {
+            backgroundColor: '#ff3e1d',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            padding: '8px 20px',
+            fontSize: '0.9375rem',
+            fontWeight: '500',
+            cursor: 'pointer',
+            transition: '0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
         }
     };
 
@@ -163,7 +178,7 @@ const Navbar = () => {
             </div>
 
             <div style={styles.rightControls}>
-                {/* Interactive Avatar Area */}
+                {/* --- HIDING THE PROFILE ICON AS REQUESTED ---
                 <div
                     style={styles.avatarContainer}
                     ref={dropdownRef}
@@ -173,7 +188,6 @@ const Navbar = () => {
                         <div style={styles.onlineIndicator}></div>
                     </div>
 
-                    {/* Logout Dropdown */}
                     <div style={styles.dropdownMenu}>
                         <div
                             style={styles.menuItem}
@@ -184,7 +198,19 @@ const Navbar = () => {
                             <span style={{ marginRight: '8px' }}>🚪</span> Logout
                         </div>
                     </div>
-                </div>
+                </div> 
+                */}
+
+                {/* --- NEW DIRECT LOGOUT BUTTON --- */}
+                <button
+                    style={styles.logoutBtn}
+                    onClick={handleLogout}
+                    onMouseEnter={(e) => { e.target.style.backgroundColor = '#e6381a' }}
+                    onMouseLeave={(e) => { e.target.style.backgroundColor = '#ff3e1d' }}
+                >
+                    Logout
+                    {/* 🚪 Logout */}
+                </button>
             </div>
         </nav>
     );
