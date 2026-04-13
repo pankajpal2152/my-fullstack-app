@@ -940,7 +940,7 @@ const AccountTab = () => {
         <>
             <ToastContainer autoClose={3000} pauseOnHover={false} />
 
-            {appUserRole === 'District Administrator' ? (
+            {appUserRole === 'District Administrator' || appUserRole === 'State Super Administrator' ? (
                 <>
                     <DistrictAdminForm onSuccess={handleFormSuccess} />
                     <DistrictAdminTable refreshTrigger={refreshTrigger} />
