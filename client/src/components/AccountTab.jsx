@@ -809,7 +809,7 @@ const SupervisorTable = ({ refreshTrigger }) => {
     return (
         <div style={{ ...styles.card, overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '24px 24px 0 24px' }}>
-                <h5 style={styles.cardHeader}>Supervisor (Astha Maa) Database:</h5>
+                <h5 style={styles.cardHeader}>Supervisor (Astha Maa):-</h5>
                 <button onClick={fetchMembers} style={styles.btnOutline}>Refresh Data</button>
             </div>
             <div style={styles.cardBody}>
@@ -1159,7 +1159,7 @@ const DistrictAdminTable = ({ refreshTrigger }) => {
     return (
         <div style={{ ...styles.card, overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '24px 24px 0 24px' }}>
-                <h5 style={styles.cardHeader}>District Administrators Database:</h5>
+                <h5 style={styles.cardHeader}>District Administrators:-</h5>
                 <button onClick={fetchMembers} style={styles.btnOutline}>Refresh Data</button>
             </div>
             <div style={styles.cardBody}>
