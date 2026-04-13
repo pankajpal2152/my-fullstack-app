@@ -11,7 +11,7 @@ import { API_BASE_URL, DUMMY_AVATAR, extractBase64, styles, FormInput, fileToBas
 // Import the specific Forms and Schemas
 import AsthaDidiForm, { accountSchema } from './forms/AsthaDidiForm';
 import DistrictAdminForm, { ngoSchema } from './forms/DistrictAdminForm';
-import SupervisorForm from './forms/SupervisorForm';
+import SupervisorForm, { asthaMaaSchema } from './forms/SupervisorForm';
 
 // ==========================================
 // UTILITY: Safe Local Storage Access
@@ -184,11 +184,11 @@ const AsthaDidiModal = ({ member, mode, onClose, onSuccess }) => {
                         <div style={styles.formGrid}>
                             <div style={styles.inputGroup}>
                                 <label style={styles.label}>Select State *</label>
-                                <Controller name="state" control={control} render={({ field }) => (<Select {...field} options={dbStates} styles={styles.selectStyles(!!errors.state)} isDisabled={isView} />)} />
+                                <Controller name="state" control={control} render={({ field }) => (<Select {...field} options={dbStates} styles={styles.selectStyles(!!errors.state)} isDisabled={isView} menuPortalTarget={document.body} />)} />
                             </div>
                             <div style={styles.inputGroup}>
                                 <label style={styles.label}>District *</label>
-                                <Controller name="district" control={control} render={({ field }) => (<Select {...field} options={dbDistricts} styles={styles.selectStyles(!!errors.district)} isDisabled={isView || !selectedState} />)} />
+                                <Controller name="district" control={control} render={({ field }) => (<Select {...field} options={dbDistricts} styles={styles.selectStyles(!!errors.district)} isDisabled={isView || !selectedState} menuPortalTarget={document.body} />)} />
                             </div>
                             <Controller name="city" control={control} render={({ field }) => (<FormInput label="City" id="edit_city" error={errors.city} disabled={isView} {...field} />)} />
                             <Controller name="block" control={control} render={({ field }) => (<FormInput label="Block" id="edit_block" error={errors.block} disabled={isView} {...field} />)} />
@@ -317,7 +317,6 @@ const MembersTable = ({ refreshTrigger }) => {
             toast.loading("Deleting...", { toastId: 'delete' });
             const loggedInUser = getSafeUser();
 
-            // SOFT DELETE: Use string "0" to bypass backend falsy || 1 overwrites
             const payload = {
                 ...selectedRow,
                 IsActive: "0",
@@ -325,7 +324,6 @@ const MembersTable = ({ refreshTrigger }) => {
                 ModifyBy: loggedInUser ? loggedInUser.email : "System"
             };
 
-            // Clean up ISO date strings to 'YYYY-MM-DD'
             Object.keys(payload).forEach(key => {
                 if (typeof payload[key] === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(payload[key])) {
                     payload[key] = payload[key].substring(0, 10);
@@ -524,8 +522,416 @@ const MembersTable = ({ refreshTrigger }) => {
     );
 };
 
+
 // ==========================================
-// 3. DISTRICT ADMIN MODAL (VIEW & EDIT)
+// 3. SUPERVISOR MODAL (ASTHA MAA - VIEW & EDIT)
+// ==========================================
+const SupervisorModal = ({ member, mode, onClose, onSuccess }) => {
+    const isView = mode === 'view';
+    const [dbStates, setDbStates] = useState([]);
+    const [dbDistricts, setDbDistricts] = useState([]);
+
+    const { control, handleSubmit, watch, setValue, formState: { errors } } = useForm({
+        resolver: zodResolver(asthaMaaSchema),
+        mode: 'onChange',
+        defaultValues: {
+            fullName: member.PerName || '',
+            sdwOf: member.SdwOf || '',
+            dob: member.DOB ? member.DOB.substring(0, 10) : '',
+            guardianName: member.GuardianName || '',
+            state: null, district: null,
+            block: member.BlockName || '',
+            gramPanchayat: member.GramPanchayet || '',
+            cityVillage: member.CityVillage || '',
+            mobileNo: member.ContactNo || '',
+            pinCode: String(member.Pincode || ''),
+            aadhaarAddress: member.AadhaarAddress || ''
+        }
+    });
+
+    const selectedState = watch("state");
+
+    useEffect(() => {
+        fetch(`${API_BASE_URL}/states`).then(res => res.json()).then(data => {
+            const formattedStates = data.map(s => ({ value: s.StateId, label: s.StateName }));
+            setDbStates(formattedStates);
+            if (member.StateName) {
+                const matchedState = formattedStates.find(s => s.label === member.StateName);
+                if (matchedState) setValue("state", matchedState);
+            }
+        });
+    }, [member.StateName, setValue]);
+
+    useEffect(() => {
+        if (selectedState && selectedState.value) {
+            fetch(`${API_BASE_URL}/districts/${selectedState.value}`).then(res => res.json()).then(data => {
+                const formattedDistricts = data.map(d => ({ value: d.DistId, label: d.DistName }));
+                setDbDistricts(formattedDistricts);
+                if (member.DistName) {
+                    const matchedDist = formattedDistricts.find(d => d.label === member.DistName);
+                    if (matchedDist) setValue("district", matchedDist);
+                }
+            });
+        } else { setDbDistricts([]); }
+    }, [selectedState, member.DistName, setValue]);
+
+    const onSubmit = async (data) => {
+        if (isView) { onClose(); return; }
+
+        const stateName = data.state ? data.state.label : "";
+        const districtName = data.district ? data.district.label : "";
+        const loggedInUser = getSafeUser();
+
+        const dbPayload = {
+            ...member,
+            PerName: data.fullName, GuardianName: data.guardianName, SdwOf: data.sdwOf, DOB: data.dob,
+            StateName: stateName, DistName: districtName, CityVillage: data.cityVillage, BlockName: data.block,
+            GramPanchayet: data.gramPanchayat, Pincode: parseInt(data.pinCode), ContactNo: data.mobileNo,
+            AadhaarAddress: data.aadhaarAddress, ModifyBy: loggedInUser ? loggedInUser.email : "System"
+        };
+
+        if (dbPayload.DOB) dbPayload.DOB = dbPayload.DOB.substring(0, 10);
+
+        try {
+            toast.loading("Updating supervisor...", { toastId: 'updateSup' });
+            const res = await fetch(`${API_BASE_URL}/supervisor/${member.RegInfoId}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dbPayload)
+            });
+            toast.dismiss('updateSup');
+            if (res.ok) { toast.success("Supervisor updated successfully!", { position: "top-right" }); onSuccess(); }
+            else { toast.error("Failed to update.", { position: "top-right" }); }
+        } catch (error) { toast.dismiss('updateSup'); toast.error("Network error.", { position: "top-right" }); }
+    };
+
+    return (
+        <div style={styles.modalOverlay}>
+            <div style={{ ...styles.modalContent, maxWidth: '1000px', padding: '0' }}>
+                <div style={styles.cardHeader}>
+                    <h5 style={{ margin: 0 }}>{isView ? 'View' : 'Edit'} Astha Maa (Supervisor) Details</h5>
+                    <button style={styles.closeBtn} onClick={onClose}>×</button>
+                </div>
+                <div style={styles.cardBody}>
+
+                    <div style={{ marginBottom: '24px' }}>
+                        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center', fontSize: '0.9rem', color: '#566a7f', fontWeight: '500' }}>
+                            <div><strong>ID:</strong> #{member.RegInfoId}</div>
+                            <div><strong>Status:</strong> {member.Status === 2 ? 'Approved' : 'Pending'}</div>
+                            <div><strong>Joining Amount:</strong> ₹{member.JoiningAmt}</div>
+                            <div><strong>Wallet Balance:</strong> ₹{member.WalletBalance}</div>
+                        </div>
+                    </div>
+
+                    <form onSubmit={handleSubmit(onSubmit, () => !isView && toast.error("Check red fields!"))}>
+                        <h6 style={styles.sectionHeader}>PERSONAL DETAILS</h6>
+                        <div style={styles.formGrid}>
+                            <Controller name="fullName" control={control} render={({ field }) => (<FormInput label="Full Name *" id="sup_fullName" error={errors.fullName} disabled={isView} {...field} />)} />
+                            <Controller name="sdwOf" control={control} render={({ field }) => (<FormInput label="S/D/W of *" id="sup_sdwOf" error={errors.sdwOf} disabled={isView} {...field} />)} />
+                            <Controller name="dob" control={control} render={({ field }) => (<FormInput label="Date of Birth *" id="sup_dob" error={errors.dob} type="date" disabled={isView} {...field} />)} />
+                            <Controller name="guardianName" control={control} render={({ field }) => (<FormInput label="Guardian Name *" id="sup_guardianName" error={errors.guardianName} disabled={isView} {...field} />)} />
+                        </div>
+
+                        <h6 style={styles.sectionHeader}>CONTACT DETAILS</h6>
+                        <div style={styles.formGrid}>
+                            <div style={styles.inputGroup}>
+                                <label style={styles.label}>Select State *</label>
+                                <Controller name="state" control={control} render={({ field }) => (<Select {...field} options={dbStates} styles={styles.selectStyles(!!errors.state)} isDisabled={isView} menuPortalTarget={document.body} />)} />
+                            </div>
+                            <div style={styles.inputGroup}>
+                                <label style={styles.label}>District *</label>
+                                <Controller name="district" control={control} render={({ field }) => (<Select {...field} options={dbDistricts} styles={styles.selectStyles(!!errors.district)} isDisabled={isView || !selectedState} menuPortalTarget={document.body} />)} />
+                            </div>
+                            <Controller name="block" control={control} render={({ field }) => (<FormInput label="Block *" id="sup_block" error={errors.block} disabled={isView} {...field} />)} />
+                            <Controller name="gramPanchayat" control={control} render={({ field }) => (<FormInput label="Gram Panchayat Name *" id="sup_gramPanchayat" error={errors.gramPanchayat} disabled={isView} {...field} />)} />
+                            <Controller name="cityVillage" control={control} render={({ field }) => (<FormInput label="City/ Village Name *" id="sup_cityVillage" error={errors.cityVillage} disabled={isView} {...field} />)} />
+                            <Controller name="mobileNo" control={control} render={({ field }) => (<FormInput label="Mobile No. *" id="sup_mobileNo" type="tel" error={errors.mobileNo} disabled={isView} {...field} />)} />
+                            <Controller name="pinCode" control={control} render={({ field }) => (<FormInput label="Pin Code *" id="sup_pinCode" error={errors.pinCode} disabled={isView} {...field} />)} />
+                        </div>
+
+                        <div style={styles.formGrid}>
+                            <Controller name="aadhaarAddress" control={control} render={({ field }) => (
+                                <div style={{ ...styles.inputGroup, gridColumn: '1 / -1' }}>
+                                    <label htmlFor="aadhaarAddress" style={styles.label}>Address as per Aadhaar Card *</label>
+                                    <textarea id="aadhaarAddress" disabled={isView} style={{ ...styles.input(!!errors.aadhaarAddress), resize: 'vertical', minHeight: '80px', backgroundColor: isView ? '#eceeef' : '#fff' }} {...field} />
+                                </div>
+                            )} />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '32px', gap: '10px' }}>
+                            <button type="button" style={styles.btnOutline} onClick={onClose}>{isView ? 'Close' : 'Cancel'}</button>
+                            {!isView && <button type="submit" style={styles.btnPrimary}>Save Changes</button>}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ==========================================
+// 4. SUPERVISOR TABLE (ASTHA MAA)
+// ==========================================
+const SupervisorTable = ({ refreshTrigger }) => {
+    const [members, setMembers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [userRole, setUserRole] = useState('');
+    const [userName, setUserName] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [rowsPerPage, setRowsPerPage] = useState(5);
+    const [sortConfig, setSortConfig] = useState(null);
+
+    const [viewModal, setViewModal] = useState(false);
+    const [editModal, setEditModal] = useState(false);
+    const [deleteModal, setDeleteModal] = useState(false);
+    const [approveModal, setApproveModal] = useState(false);
+    const [selectedRow, setSelectedRow] = useState(null);
+
+    useEffect(() => {
+        const user = getSafeUser();
+        if (user) { setUserRole(user.role || ''); setUserName(user.username || ''); }
+    }, []);
+
+    const fetchMembers = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_URL}/supervisor`);
+            if (!res.ok) throw new Error("Failed to fetch table data");
+            let data = await res.json();
+
+            // SOFT DELETE FILTER
+            data = data.filter(member => String(member.IsActive) !== '0' && String(member.Status) !== '0');
+            setMembers(data);
+        } catch (error) { toast.error("Failed to load supervisor data.", { position: "top-right" }); }
+        finally { setLoading(false); }
+    };
+
+    useEffect(() => { fetchMembers(); }, [refreshTrigger]);
+
+    const sortedMembers = useMemo(() => {
+        let sortableItems = [...members];
+        if (sortConfig !== null) {
+            sortableItems.sort((a, b) => {
+                let aVal = a[sortConfig.key] || ''; let bVal = b[sortConfig.key] || '';
+                if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+                if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+                if (aVal < bVal) return sortConfig.direction === 'ascending' ? -1 : 1;
+                if (aVal > bVal) return sortConfig.direction === 'ascending' ? 1 : -1;
+                return 0;
+            });
+        }
+        return sortableItems;
+    }, [members, sortConfig]);
+
+    const requestSort = (key) => {
+        let direction = 'ascending';
+        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') direction = 'descending';
+        setSortConfig({ key, direction });
+    };
+
+    const getSortIcon = (columnName) => {
+        if (!sortConfig || sortConfig.key !== columnName) return <span style={{ opacity: 0.3, marginLeft: '4px' }}>↕</span>;
+        return sortConfig.direction === 'ascending' ? <span style={{ marginLeft: '4px' }}>▲</span> : <span style={{ marginLeft: '4px' }}>▼</span>;
+    };
+
+    const totalPages = Math.max(1, Math.ceil(sortedMembers.length / rowsPerPage));
+    useEffect(() => { if (currentPage > totalPages) setCurrentPage(1); }, [sortedMembers.length, totalPages, currentPage]);
+
+    const indexOfLastMember = currentPage * rowsPerPage;
+    const indexOfFirstMember = indexOfLastMember - rowsPerPage;
+    const currentMembers = sortedMembers.slice(indexOfFirstMember, indexOfLastMember);
+    const handleNextPage = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
+    const handlePrevPage = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
+    const handleRowsChange = (e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); };
+
+    const openModal = (type, member) => {
+        setSelectedRow({ ...member });
+        if (type === 'view') setViewModal(true);
+        if (type === 'edit') setEditModal(true);
+        if (type === 'delete') setDeleteModal(true);
+        if (type === 'approve') setApproveModal(true);
+    };
+
+    const closeModal = () => { setViewModal(false); setEditModal(false); setDeleteModal(false); setApproveModal(false); setSelectedRow(null); };
+
+    const confirmDelete = async () => {
+        try {
+            toast.loading("Deleting...", { toastId: 'deleteSup' });
+            const loggedInUser = getSafeUser();
+
+            const payload = { ...selectedRow, IsActive: "0", Status: "0", ModifyBy: loggedInUser ? loggedInUser.email : "System" };
+
+            Object.keys(payload).forEach(key => {
+                if (typeof payload[key] === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(payload[key])) {
+                    payload[key] = payload[key].substring(0, 10);
+                }
+            });
+
+            const res = await fetch(`${API_BASE_URL}/supervisor/${selectedRow.RegInfoId}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+
+            toast.dismiss('deleteSup');
+            if (res.ok) { toast.success("Member deleted."); setMembers(prev => prev.filter(m => m.RegInfoId !== selectedRow.RegInfoId)); closeModal(); }
+            else { toast.error("Failed to delete."); }
+        } catch (error) { toast.dismiss('deleteSup'); toast.error("Network error."); }
+    };
+
+    const confirmApprove = async () => {
+        try {
+            toast.loading("Approving...", { toastId: 'approveSup' });
+            const approvalId = Math.floor(100000 + Math.random() * 900000);
+            const dateStr = new Date().toISOString().split('T')[0];
+            const approverString = userName && userRole ? `${userName} (${userRole})` : 'System Admin';
+
+            const payload = { ...selectedRow, Status: 2, AprovalNumber: approvalId, AprovalDate: dateStr, AprovedBy: approverString };
+
+            Object.keys(payload).forEach(key => {
+                if (typeof payload[key] === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(payload[key])) {
+                    payload[key] = payload[key].substring(0, 10);
+                }
+            });
+
+            const res = await fetch(`${API_BASE_URL}/supervisor/${selectedRow.RegInfoId}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+            toast.dismiss('approveSup');
+            if (res.ok) { toast.success(`Member Approved! ID: ${approvalId}`); closeModal(); fetchMembers(); }
+            else { toast.error("Failed to approve."); }
+        } catch (error) { toast.dismiss('approveSup'); toast.error("Network error."); }
+    };
+
+    const renderTh = (label, key, isStickyLeft = false, isStickyRight = false) => {
+        let thStyle = { ...styles.th };
+        if (isStickyLeft) thStyle = { ...styles.stickyLeftTh };
+        if (isStickyRight) thStyle = { ...styles.stickyRightTh };
+        return <th style={thStyle} onClick={() => requestSort(key)}>{label} {getSortIcon(key)}</th>;
+    };
+
+    return (
+        <div style={{ ...styles.card, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '24px 24px 0 24px' }}>
+                <h5 style={styles.cardHeader}>Supervisor (Astha Maa) Database:</h5>
+                <button onClick={fetchMembers} style={styles.btnOutline}>Refresh Data</button>
+            </div>
+            <div style={styles.cardBody}>
+                {loading ? <p>Loading data...</p> : (
+                    <>
+                        <div style={styles.tableContainer}>
+                            <table style={styles.table}>
+                                <thead>
+                                    <tr>
+                                        {renderTh('ID', 'RegInfoId', true, false)}
+                                        {renderTh('Profile', 'ProfileImage')}
+                                        {renderTh('Full Name', 'PerName')}
+                                        {renderTh('S/D/W Of', 'SdwOf')}
+                                        {renderTh('DOB', 'DOB')}
+                                        {renderTh('Guardian Name', 'GuardianName')}
+                                        {renderTh('Mobile No', 'ContactNo')}
+                                        {renderTh('State', 'StateName')}
+                                        {renderTh('District', 'DistName')}
+                                        {renderTh('Block', 'BlockName')}
+                                        {renderTh('Gram Panchayet', 'GramPanchayet')}
+                                        {renderTh('City/Village', 'CityVillage')}
+                                        {renderTh('Pin Code', 'Pincode')}
+                                        {renderTh('Aadhaar Address', 'AadhaarAddress')}
+                                        {renderTh('Joining Amt', 'JoiningAmt')}
+                                        {renderTh('Wallet Bal', 'WalletBalance')}
+                                        {renderTh('Status', 'Status')}
+                                        {renderTh('Approved By', 'AprovedBy')}
+                                        {renderTh('Created By', 'CreatedBy')}
+                                        <th style={styles.stickyRightTh}>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {currentMembers.map((row) => (
+                                        <tr key={row.RegInfoId}>
+                                            <td style={styles.stickyLeftTd}>#{row.RegInfoId}</td>
+                                            <td style={styles.td}>
+                                                <img src={extractBase64(row.ProfileImage) || DUMMY_AVATAR} alt="User" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
+                                            </td>
+                                            <td style={styles.td}>{row.PerName}</td>
+                                            <td style={styles.td}>{row.SdwOf}</td>
+                                            <td style={styles.td}>{row.DOB ? row.DOB.substring(0, 10) : ''}</td>
+                                            <td style={styles.td}>{row.GuardianName}</td>
+                                            <td style={styles.td}>{row.ContactNo}</td>
+                                            <td style={styles.td}>{row.StateName}</td>
+                                            <td style={styles.td}>{row.DistName}</td>
+                                            <td style={styles.td}>{row.BlockName}</td>
+                                            <td style={styles.td}>{row.GramPanchayet}</td>
+                                            <td style={styles.td}>{row.CityVillage}</td>
+                                            <td style={styles.td}>{row.Pincode}</td>
+                                            <td style={styles.td}>{row.AadhaarAddress}</td>
+                                            <td style={styles.td}>₹{row.JoiningAmt}</td>
+                                            <td style={styles.td}>₹{row.WalletBalance}</td>
+                                            <td style={{ ...styles.td, color: Number(row.Status) === 2 ? 'green' : 'orange', fontWeight: 'bold' }}>{Number(row.Status) === 2 ? 'Approved' : 'Pending'}</td>
+                                            <td style={styles.td}>{row.AprovedBy || '-'}</td>
+                                            <td style={styles.td}>{row.CreatedBy || '-'}</td>
+                                            <td style={styles.stickyRightTd}>
+                                                <button onClick={() => openModal('view', row)} style={styles.actionBtn}>👁️</button>
+                                                <button onClick={() => openModal('edit', row)} style={styles.actionBtn}>✏️</button>
+                                                <button onClick={() => openModal('delete', row)} style={styles.actionBtn}>🗑️</button>
+                                                {Number(row.Status) !== 2 && (
+                                                    <button onClick={() => openModal('approve', row)} style={styles.actionBtn}>✅</button>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {currentMembers.length === 0 && <tr><td colSpan="20" style={{ ...styles.td, textAlign: 'center' }}>No members found in database.</td></tr>}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style={styles.paginationContainer}>
+                            <div>
+                                <span>Rows per page: </span>
+                                <select value={rowsPerPage} onChange={handleRowsChange} style={styles.pageSelect}>
+                                    <option value={5}>5</option>
+                                    <option value={10}>10</option>
+                                    <option value={20}>20</option>
+                                </select>
+                            </div>
+                            <div>
+                                <span style={{ marginRight: '16px' }}>Showing {sortedMembers.length === 0 ? 0 : indexOfFirstMember + 1} to {Math.min(indexOfLastMember, sortedMembers.length)} of {sortedMembers.length}</span>
+                                <button onClick={handlePrevPage} disabled={currentPage === 1} style={currentPage === 1 ? styles.pageBtnDisabled : styles.pageBtn}>Prev</button>
+                                <span style={{ margin: '0 12px' }}>Page {currentPage} of {totalPages}</span>
+                                <button onClick={handleNextPage} disabled={currentPage === totalPages || totalPages === 0} style={(currentPage === totalPages || totalPages === 0) ? styles.pageBtnDisabled : styles.pageBtn}>Next</button>
+                            </div>
+                        </div>
+                    </>
+                )}
+            </div>
+
+            {viewModal && selectedRow && <SupervisorModal member={selectedRow} mode="view" onClose={closeModal} onSuccess={closeModal} />}
+            {editModal && selectedRow && <SupervisorModal member={selectedRow} mode="edit" onClose={closeModal} onSuccess={() => { closeModal(); fetchMembers(); }} />}
+
+            {deleteModal && selectedRow && (
+                <div style={styles.modalOverlay}>
+                    <div style={{ ...styles.modalContent, maxWidth: '400px', textAlign: 'center' }}>
+                        <h4 style={{ color: '#ff3e1d' }}>Confirm Delete</h4>
+                        <p>Delete <strong>{selectedRow.PerName}</strong>?</p>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                            <button onClick={closeModal} style={styles.btnOutline}>Cancel</button>
+                            <button onClick={confirmDelete} style={styles.btnDanger}>Yes, Delete</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {approveModal && selectedRow && (
+                <div style={styles.modalOverlay}>
+                    <div style={{ ...styles.modalContent, maxWidth: '400px', textAlign: 'center' }}>
+                        <h4 style={{ color: '#71dd37' }}>Approve Member</h4>
+                        <p>Approve <strong>{selectedRow.PerName}</strong>?</p>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                            <button onClick={closeModal} style={styles.btnOutline}>Cancel</button>
+                            <button onClick={confirmApprove} style={styles.btnSuccess}>Confirm</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ==========================================
+// 5. DISTRICT ADMIN MODAL (VIEW & EDIT)
 // ==========================================
 const DistrictAdminModal = ({ member, mode, onClose, onSuccess }) => {
     const isView = mode === 'view';
@@ -655,11 +1061,11 @@ const DistrictAdminModal = ({ member, mode, onClose, onSuccess }) => {
                             <Controller name="ngoWorkingAddress" control={control} render={({ field }) => (<FormInput label="NGO Working Address *" id="e_ngoWorkAdd" error={errors.ngoWorkingAddress} disabled={isView} {...field} />)} />
                             <div style={styles.inputGroup}>
                                 <label style={styles.label}>State *</label>
-                                <Controller name="state" control={control} render={({ field }) => (<Select {...field} options={dbStates} styles={styles.selectStyles(!!errors.state)} isDisabled={isView} />)} />
+                                <Controller name="state" control={control} render={({ field }) => (<Select {...field} options={dbStates} styles={styles.selectStyles(!!errors.state)} isDisabled={isView} menuPortalTarget={document.body} />)} />
                             </div>
                             <div style={styles.inputGroup}>
                                 <label style={styles.label}>District *</label>
-                                <Controller name="district" control={control} render={({ field }) => (<Select {...field} options={dbDistricts} styles={styles.selectStyles(!!errors.district)} isDisabled={isView || !selectedState} />)} />
+                                <Controller name="district" control={control} render={({ field }) => (<Select {...field} options={dbDistricts} styles={styles.selectStyles(!!errors.district)} isDisabled={isView || !selectedState} menuPortalTarget={document.body} />)} />
                             </div>
                             <Controller name="blockName" control={control} render={({ field }) => (<FormInput label="Block Name *" id="e_block" error={errors.blockName} disabled={isView} {...field} />)} />
                         </div>
@@ -710,7 +1116,7 @@ const DistrictAdminModal = ({ member, mode, onClose, onSuccess }) => {
 };
 
 // ==========================================
-// 4. DISTRICT ADMIN TABLE
+// 6. DISTRICT ADMIN TABLE
 // ==========================================
 const DistrictAdminTable = ({ refreshTrigger }) => {
     const [members, setMembers] = useState([]);
@@ -719,8 +1125,6 @@ const DistrictAdminTable = ({ refreshTrigger }) => {
     // Modal states
     const [viewModal, setViewModal] = useState(false);
     const [editModal, setEditModal] = useState(false);
-    const [deleteModal, setDeleteModal] = useState(false);
-    const [approveModal, setApproveModal] = useState(false);
     const [selectedRow, setSelectedRow] = useState(null);
 
     const fetchMembers = async () => {
@@ -744,65 +1148,9 @@ const DistrictAdminTable = ({ refreshTrigger }) => {
         setSelectedRow({ ...member });
         if (type === 'view') setViewModal(true);
         if (type === 'edit') setEditModal(true);
-        if (type === 'delete') setDeleteModal(true);
-        if (type === 'approve') setApproveModal(true);
     };
 
-    const closeModal = () => { setViewModal(false); setEditModal(false); setDeleteModal(false); setApproveModal(false); setSelectedRow(null); };
-
-    const confirmDelete = async () => {
-        try {
-            toast.loading("Deleting...", { toastId: 'delNgo' });
-            const loggedInUser = getSafeUser();
-
-            // SOFT DELETE: Use string "0" to bypass backend falsy || 1 overwrites
-            const payload = {
-                ...selectedRow,
-                IsActive: "0",
-                ModifyBy: loggedInUser ? loggedInUser.email : "System"
-            };
-
-            // Clean up ISO date strings to 'YYYY-MM-DD'
-            Object.keys(payload).forEach(key => {
-                if (typeof payload[key] === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(payload[key])) {
-                    payload[key] = payload[key].substring(0, 10);
-                }
-            });
-
-            const res = await fetch(`${API_BASE_URL}/districtadmin/${selectedRow.DistNGORegId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            toast.dismiss('delNgo');
-            if (res.ok) {
-                toast.success("Record deleted.");
-                setMembers(prev => prev.filter(m => m.DistNGORegId !== selectedRow.DistNGORegId));
-                closeModal();
-            }
-            else { toast.error("Failed to delete."); }
-        } catch (error) { toast.dismiss('delNgo'); toast.error("Network error."); }
-    };
-
-    const confirmApprove = async () => {
-        try {
-            toast.loading("Approving...", { toastId: 'appNgo' });
-            const loggedInUser = getSafeUser();
-            const payload = { ...selectedRow, IsActive: 2, AprovedDate: new Date().toISOString().split('T')[0], AprovedBy: loggedInUser ? loggedInUser.email : 'System' };
-
-            Object.keys(payload).forEach(key => {
-                if (typeof payload[key] === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(payload[key])) {
-                    payload[key] = payload[key].substring(0, 10);
-                }
-            });
-
-            const res = await fetch(`${API_BASE_URL}/districtadmin/${selectedRow.DistNGORegId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            toast.dismiss('appNgo');
-            if (res.ok) { toast.success("Approved successfully!"); closeModal(); fetchMembers(); }
-            else toast.error("Failed to approve.");
-        } catch (error) { toast.dismiss('appNgo'); toast.error("Network error."); }
-    };
+    const closeModal = () => { setViewModal(false); setEditModal(false); setSelectedRow(null); };
 
     const renderTh = (label, isLeft = false, isRight = false) => (
         <th style={isLeft ? styles.stickyLeftTh : isRight ? styles.stickyRightTh : styles.th}>{label}</th>
@@ -877,10 +1225,6 @@ const DistrictAdminTable = ({ refreshTrigger }) => {
                                         <td style={styles.stickyRightTd}>
                                             <button onClick={() => openModal('view', row)} style={styles.actionBtn}>👁️</button>
                                             <button onClick={() => openModal('edit', row)} style={styles.actionBtn}>✏️</button>
-                                            <button onClick={() => openModal('delete', row)} style={styles.actionBtn}>🗑️</button>
-                                            {Number(row.IsActive) !== 2 && (
-                                                <button onClick={() => openModal('approve', row)} style={styles.actionBtn}>✅</button>
-                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -893,62 +1237,82 @@ const DistrictAdminTable = ({ refreshTrigger }) => {
             {viewModal && selectedRow && <DistrictAdminModal member={selectedRow} mode="view" onClose={closeModal} onSuccess={closeModal} />}
             {editModal && selectedRow && <DistrictAdminModal member={selectedRow} mode="edit" onClose={closeModal} onSuccess={() => { closeModal(); fetchMembers(); }} />}
 
-            {deleteModal && selectedRow && (
-                <div style={styles.modalOverlay}>
-                    <div style={{ ...styles.modalContent, maxWidth: '400px', textAlign: 'center' }}>
-                        <h4 style={{ color: '#ff3e1d' }}>Confirm Delete</h4>
-                        <p>Delete <strong>{selectedRow.DistNGOName}</strong>?</p>
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
-                            <button onClick={closeModal} style={styles.btnOutline}>Cancel</button>
-                            <button onClick={confirmDelete} style={styles.btnDanger}>Yes, Delete</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {approveModal && selectedRow && (
-                <div style={styles.modalOverlay}>
-                    <div style={{ ...styles.modalContent, maxWidth: '400px', textAlign: 'center' }}>
-                        <h4 style={{ color: '#71dd37' }}>Approve NGO</h4>
-                        <p>Approve <strong>{selectedRow.DistNGOName}</strong>?</p>
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
-                            <button onClick={closeModal} style={styles.btnOutline}>Cancel</button>
-                            <button onClick={confirmApprove} style={styles.btnSuccess}>Confirm</button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
 
 // ==========================================
-// 5. ORCHESTRATOR COMPONENT
+// 7. ORCHESTRATOR COMPONENT
 // ==========================================
 const AccountTab = () => {
-    const [appUserRole, setAppUserRole] = useState('');
+    const [appUserRole, setAppUserRole] = useState(null); // Initialize as null for loading state
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [adminActiveView, setAdminActiveView] = useState('District Administrator');
 
     useEffect(() => {
         const user = getSafeUser();
-        if (user) setAppUserRole(user.role || '');
+        if (user) {
+            setAppUserRole(user.role || '');
+        } else {
+            setAppUserRole(''); // Handle no user gracefully
+        }
     }, []);
 
     const handleFormSuccess = () => setRefreshTrigger(prev => prev + 1);
+
+    // Prevent rendering until local storage has been checked
+    if (appUserRole === null) {
+        return <div style={{ padding: '24px', color: '#697a8d' }}>Loading Interface...</div>;
+    }
+
+    // Options for the Admin Dropdown
+    const adminOptions = [
+        { value: 'District Administrator', label: 'District Administrator' },
+        { value: 'Supervisor', label: 'Supervisor (Astha Maa)' },
+        { value: 'Astha Didi', label: 'Astha Didi' }
+    ];
+
+    // Determine which view to render
+    const currentView = (appUserRole === 'District Administrator' || appUserRole === 'State Super Administrator')
+        ? adminActiveView
+        : appUserRole;
 
     return (
         <>
             <ToastContainer autoClose={3000} pauseOnHover={false} />
 
-            {appUserRole === 'District Administrator' || appUserRole === 'State Super Administrator' ? (
+            {/* ONLY show this dropdown if the user is a Dist Admin or State Super Admin */}
+            {(appUserRole === 'District Administrator' || appUserRole === 'State Super Administrator') && (
+                <div style={{ ...styles.card, padding: '24px', marginBottom: '24px', overflow: 'visible' }}>
+                    <div style={{ width: '100%', maxWidth: '400px' }}>
+                        <label style={{ ...styles.label, marginBottom: '8px', display: 'block' }}>
+                            Select Role Entry / View <span style={{ color: '#ff3e1d' }}>*</span>
+                        </label>
+                        <Select
+                            options={adminOptions}
+                            value={adminOptions.find(o => o.value === adminActiveView)}
+                            onChange={(selected) => setAdminActiveView(selected.value)}
+                            styles={{
+                                ...styles.selectStyles(false),
+                                menuPortal: base => ({ ...base, zIndex: 9999 })
+                            }}
+                            menuPortalTarget={document.body}
+                            isSearchable={false}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* Render the specific Form and Table based on currentView */}
+            {currentView === 'District Administrator' || currentView === 'State Super Administrator' ? (
                 <>
                     <DistrictAdminForm onSuccess={handleFormSuccess} />
                     <DistrictAdminTable refreshTrigger={refreshTrigger} />
                 </>
-            ) : appUserRole === 'Supervisor' ? (
+            ) : currentView === 'Supervisor' ? (
                 <>
                     <SupervisorForm onSuccess={handleFormSuccess} />
-                    <p style={{ marginTop: '20px', color: '#697a8d' }}>*Supervisor Table Placeholder*</p>
+                    <SupervisorTable refreshTrigger={refreshTrigger} />
                 </>
             ) : (
                 <>
