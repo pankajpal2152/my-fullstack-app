@@ -79,6 +79,67 @@ exports.deleteAsthaDidi = (req, res) => {
 };
 
 // ==========================================
+// ASTHA MAA REGISTRATION (asthama_reg_info)
+// ==========================================
+exports.getAsthaMaa = (req, res) => {
+    db.query('SELECT * FROM asthama_reg_info ORDER BY RegInfoId DESC', (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(results);
+    });
+};
+
+exports.createAsthaMaa = (req, res) => {
+    const data = req.body;
+    const insertQuery = `INSERT INTO asthama_reg_info
+        (ProfileImage, PerName, GuardianName, DOB, GuardianContactNo, StateName, DistName, City, BlockName, PO, PS, GramPanchayet, Village, Pincode, ContactNo, MailId, BankName, BranchName, AcctNo, IFSCode, PanNo, AadharNo, JoiningAmt, WalletBalance, IsActive, Status, AprovedBy, AprovalDate, AprovalNumber, CreatedBy) 
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+
+    const values = [
+        data.ProfileImage, data.PerName, data.GuardianName, data.DOB, data.GuardianContactNo, data.StateName, data.DistName, data.City, data.BlockName, data.PO, data.PS, data.GramPanchayet, data.Village, data.Pincode, data.ContactNo, data.MailId, data.BankName, data.BranchName, data.AcctNo, data.IFSCode, data.PanNo, data.AadharNo, data.JoiningAmt, data.WalletBalance, data.IsActive || 1, data.Status || 1, data.AprovedBy || null, data.AprovalDate || null, data.AprovalNumber || null, data.CreatedBy
+    ];
+
+    db.query(insertQuery, values, (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        const newId = result.insertId;
+        if (data.ProfileImage && !data.ProfileImage.startsWith('ID:')) {
+            const taggedImage = `ID:${newId}||${data.ProfileImage}`;
+            db.query('UPDATE asthama_reg_info SET ProfileImage=? WHERE RegInfoId=?', [taggedImage, newId], () => { });
+        }
+        res.json({ message: 'Astha Maa added successfully', id: newId });
+    });
+};
+
+exports.updateAsthaMaa = (req, res) => {
+    const { id } = req.params;
+    const data = req.body;
+
+    if (data.ProfileImage && !data.ProfileImage.startsWith('ID:')) {
+        data.ProfileImage = `ID:${id}||${data.ProfileImage}`;
+    }
+
+    const updateQuery = `UPDATE asthama_reg_info SET 
+        ProfileImage=?, PerName=?, GuardianName=?, DOB=?, GuardianContactNo=?, StateName=?, DistName=?, City=?, BlockName=?, PO=?, PS=?, GramPanchayet=?, Village=?, Pincode=?, ContactNo=?, MailId=?, BankName=?, BranchName=?, AcctNo=?, IFSCode=?, PanNo=?, AadharNo=?, JoiningAmt=?, WalletBalance=?, IsActive=?, Status=?, AprovedBy=?, AprovalDate=?, AprovalNumber=?, CreatedBy=?
+        WHERE RegInfoId=?`;
+
+    const values = [
+        data.ProfileImage, data.PerName, data.GuardianName, data.DOB, data.GuardianContactNo, data.StateName, data.DistName, data.City, data.BlockName, data.PO, data.PS, data.GramPanchayet, data.Village, data.Pincode, data.ContactNo, data.MailId, data.BankName, data.BranchName, data.AcctNo, data.IFSCode, data.PanNo, data.AadharNo, data.JoiningAmt, data.WalletBalance, data.IsActive, data.Status, data.AprovedBy, data.AprovalDate, data.AprovalNumber, data.CreatedBy, id
+    ];
+
+    db.query(updateQuery, values, (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Record updated successfully' });
+    });
+};
+
+exports.deleteAsthaMaa = (req, res) => {
+    db.query('DELETE FROM asthama_reg_info WHERE RegInfoId = ?', [req.params.id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Record deleted successfully' });
+    });
+};
+
+
+// ==========================================
 // DISTRICT ADMIN REGISTRATION (dist_ngo_reg)
 // ==========================================
 exports.getDistrictAdmin = (req, res) => {

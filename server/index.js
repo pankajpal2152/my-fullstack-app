@@ -199,7 +199,8 @@ if (process.env.NODE_ENV === 'production') {
     app.use(express.static(frontendDistPath));
 
     // Handle React Router: Send all other requests to index.html so React can take over routing
-    app.get('*', (req, res) => {
+    // ✅ FIX: Changed the string '*' to a Regular Expression /.*/ to prevent path-to-regexp crashes
+    app.get(/.*/, (req, res) => {
         res.sendFile(path.resolve(frontendDistPath, 'index.html'));
     });
 } else {

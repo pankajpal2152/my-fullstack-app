@@ -3,23 +3,19 @@ import React, { useState, useEffect } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-// --- STRICT LOCAL API URL CONFIGURATION ---
-// Hardcoded to strictly use your local Node.js backend
 const API_URL = 'http://localhost:5000/api/userinfo';
 
 const RoleManagement = () => {
     const [roles, setRoles] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // Modal states
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
-    // Form state - Updated default UserRole to 'Viewer'
-    const [formData, setFormData] = useState({ UserInfoId: null, UserType: '', UserRole: 'Viewer' });
+    // Added IsActive to the form state
+    const [formData, setFormData] = useState({ UserInfoId: null, UserType: '', UserRole: 'Viewer', IsActive: 1 });
     const [selectedRole, setSelectedRole] = useState(null);
 
-    // --- 1. READ (Fetch all roles from Local DB) ---
     const fetchRoles = async () => {
         setLoading(true);
         try {
@@ -29,7 +25,7 @@ const RoleManagement = () => {
             setRoles(data);
         } catch (error) {
             console.error("Error fetching roles:", error);
-            toast.error("Failed to load roles from local database. Is the backend running?");
+            toast.error("Failed to load roles from local database.");
         } finally {
             setLoading(false);
         }
@@ -39,27 +35,23 @@ const RoleManagement = () => {
         fetchRoles();
     }, []);
 
-    // --- MODAL HANDLERS ---
     const openCreateModal = () => {
-        // Updated default UserRole to 'Viewer'
-        setFormData({ UserInfoId: null, UserType: '', UserRole: 'Viewer' });
+        setFormData({ UserInfoId: null, UserType: '', UserRole: 'Viewer', IsActive: 1 });
         setIsModalOpen(true);
     };
 
     const openEditModal = (role) => {
-        setFormData(role);
+        setFormData({ ...role, IsActive: role.IsActive !== undefined ? role.IsActive : 1 });
         setIsModalOpen(true);
     };
 
     const closeModals = () => {
         setIsModalOpen(false);
         setIsDeleteModalOpen(false);
-        // Updated default UserRole to 'Viewer'
-        setFormData({ UserInfoId: null, UserType: '', UserRole: 'Viewer' });
+        setFormData({ UserInfoId: null, UserType: '', UserRole: 'Viewer', IsActive: 1 });
         setSelectedRole(null);
     };
 
-    // --- 2. CREATE & UPDATE (Save Role to Local DB) ---
     const handleFormSubmit = async (e) => {
         e.preventDefault();
         if (!formData.UserType.trim()) {
@@ -79,7 +71,8 @@ const RoleManagement = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     UserType: formData.UserType,
-                    UserRole: formData.UserRole
+                    UserRole: formData.UserRole,
+                    IsActive: formData.IsActive // Send status to DB
                 })
             });
 
@@ -88,26 +81,18 @@ const RoleManagement = () => {
             if (response.ok) {
                 toast.success(`Role successfully ${isEditing ? 'updated' : 'created'}!`);
                 closeModals();
-                fetchRoles(); // Refresh the table data
+                fetchRoles();
             } else {
                 const text = await response.text();
-                let errorMsg = `Server Error: ${response.status}`;
-                try {
-                    const errorData = JSON.parse(text);
-                    errorMsg = errorData.error || errorMsg;
-                } catch (err) {
-                    errorMsg = `Endpoint error (${response.status}). Check local backend.`;
-                }
-                toast.error(`Error: ${errorMsg}`);
+                toast.error(`Error: ${text}`);
             }
         } catch (error) {
             toast.dismiss('saveRole');
             console.error("Error saving role:", error);
-            toast.error("Network error. Could not connect to local database.");
+            toast.error("Network error.");
         }
     };
 
-    // --- 3. DELETE (Remove Role from Local DB) ---
     const confirmDelete = (role) => {
         setSelectedRole(role);
         setIsDeleteModalOpen(true);
@@ -126,39 +111,28 @@ const RoleManagement = () => {
             if (response.ok) {
                 toast.success("Role deleted successfully!");
                 closeModals();
-                fetchRoles(); // Refresh the table data
+                fetchRoles();
             } else {
-                const text = await response.text();
-                let errorMsg = `Server Error: ${response.status}`;
-                try {
-                    const errorData = JSON.parse(text);
-                    errorMsg = errorData.error || errorMsg;
-                } catch (err) {
-                    errorMsg = `Endpoint error (${response.status}). Check local backend.`;
-                }
-                toast.error(`Error: ${errorMsg}`);
+                toast.error(`Error: Failed to delete`);
             }
         } catch (error) {
             toast.dismiss('deleteRole');
-            console.error("Error deleting role:", error);
-            toast.error("Network error. Could not connect to local database.");
+            toast.error("Network error.");
         }
     };
 
-    // --- HELPER FOR ROLE COLORS ---
     const getRoleStyles = (roleName) => {
         switch (roleName) {
             case 'Superadmin':
-                return { backgroundColor: 'rgba(255, 62, 29, 0.16)', color: '#ff3e1d' }; // Red
+                return { backgroundColor: 'rgba(255, 62, 29, 0.16)', color: '#ff3e1d' };
             case 'Admin':
-                return { backgroundColor: 'rgba(105, 108, 255, 0.16)', color: '#696cff' }; // Blue
+                return { backgroundColor: 'rgba(105, 108, 255, 0.16)', color: '#696cff' };
             case 'Viewer':
             default:
-                return { backgroundColor: 'rgba(113, 221, 55, 0.16)', color: '#71dd37' }; // Green
+                return { backgroundColor: 'rgba(113, 221, 55, 0.16)', color: '#71dd37' };
         }
     };
 
-    // --- STYLES ---
     const styles = {
         container: { display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' },
         card: { backgroundColor: '#ffffff', borderRadius: '8px', padding: '24px', boxShadow: '0 2px 6px 0 rgba(67, 89, 113, 0.12)', fontFamily: '"Public Sans", sans-serif', width: '100%', boxSizing: 'border-box' },
@@ -173,8 +147,6 @@ const RoleManagement = () => {
         td: { padding: '14px 16px', borderBottom: '1px solid #d9dee3', color: '#697a8d', fontSize: '0.9375rem' },
         actionBtnEdit: { background: 'none', border: 'none', color: '#71dd37', cursor: 'pointer', fontSize: '1.1rem', marginRight: '12px' },
         actionBtnDelete: { background: 'none', border: 'none', color: '#ff3e1d', cursor: 'pointer', fontSize: '1.1rem' },
-
-        // Modal Styles
         modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, padding: '20px' },
         modalContent: { backgroundColor: '#fff', padding: '30px', borderRadius: '8px', width: '100%', maxWidth: '450px', boxSizing: 'border-box', position: 'relative' },
         closeBtn: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#a1acb8' },
@@ -202,6 +174,7 @@ const RoleManagement = () => {
                                     <th style={styles.th}>ID</th>
                                     <th style={styles.th}>Created Role</th>
                                     <th style={styles.th}>Category Type</th>
+                                    <th style={styles.th}>Status</th>
                                     <th style={styles.th}>Actions</th>
                                 </tr>
                             </thead>
@@ -212,10 +185,19 @@ const RoleManagement = () => {
                                         <td style={styles.td}><strong>{role.UserType}</strong></td>
                                         <td style={styles.td}>
                                             <span style={{
-                                                ...getRoleStyles(role.UserRole), // Applying dynamic styles based on role
+                                                ...getRoleStyles(role.UserRole),
                                                 padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600'
                                             }}>
                                                 {role.UserRole}
+                                            </span>
+                                        </td>
+                                        <td style={styles.td}>
+                                            <span style={{
+                                                backgroundColor: role.IsActive == 1 || role.IsActive === undefined ? 'rgba(113, 221, 55, 0.16)' : 'rgba(255, 62, 29, 0.16)',
+                                                color: role.IsActive == 1 || role.IsActive === undefined ? '#71dd37' : '#ff3e1d',
+                                                padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600'
+                                            }}>
+                                                {role.IsActive == 1 || role.IsActive === undefined ? 'Active' : 'Inactive'}
                                             </span>
                                         </td>
                                         <td style={styles.td}>
@@ -225,14 +207,13 @@ const RoleManagement = () => {
                                     </tr>
                                 ))}
                                 {roles.length === 0 && (
-                                    <tr><td colSpan="4" style={{ ...styles.td, textAlign: 'center' }}>No roles found in local database. Create one above!</td></tr>
+                                    <tr><td colSpan="5" style={{ ...styles.td, textAlign: 'center' }}>No roles found in local database. Create one above!</td></tr>
                                 )}
                             </tbody>
                         </table>
                     </div>
                 )}
 
-                {/* --- CREATE / EDIT MODAL --- */}
                 {isModalOpen && (
                     <div style={styles.modalOverlay}>
                         <div style={styles.modalContent}>
@@ -254,7 +235,6 @@ const RoleManagement = () => {
                                 </div>
                                 <div>
                                     <label style={styles.label}>Category Level (User Role)</label>
-                                    {/* UPDATED DROPDOWN OPTIONS HERE */}
                                     <select
                                         style={styles.input}
                                         value={formData.UserRole}
@@ -263,6 +243,17 @@ const RoleManagement = () => {
                                         <option value="Superadmin">Superadmin</option>
                                         <option value="Admin">Admin</option>
                                         <option value="Viewer">Viewer</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={styles.label}>Status (Visibility)</label>
+                                    <select
+                                        style={styles.input}
+                                        value={formData.IsActive}
+                                        onChange={(e) => setFormData({ ...formData, IsActive: parseInt(e.target.value) })}
+                                    >
+                                        <option value={1}>Active (Visible)</option>
+                                        <option value={0}>Inactive (Hidden)</option>
                                     </select>
                                 </div>
                                 <div style={styles.modalActions}>
@@ -276,7 +267,6 @@ const RoleManagement = () => {
                     </div>
                 )}
 
-                {/* --- DELETE CONFIRMATION MODAL --- */}
                 {isDeleteModalOpen && (
                     <div style={styles.modalOverlay}>
                         <div style={{ ...styles.modalContent, maxWidth: '400px', textAlign: 'center' }}>

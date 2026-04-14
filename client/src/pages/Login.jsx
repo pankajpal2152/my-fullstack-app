@@ -372,14 +372,27 @@ const styles = {
 const LoginForm = ({ onLogin, onToggleView }) => {
     const navigate = useNavigate();
     const [showPassword, setShowPassword] = useState(false);
-    const [credentials, setCredentials] = useState({ email: '', password: '' });
+
+    // 1. Added roles state to store the fetched roles from the database
+    const [roles, setRoles] = useState([]);
+    // 2. Added 'role' to the credentials state
+    const [credentials, setCredentials] = useState({ role: '', email: '', password: '' });
+
+    // 3. Fetch roles dynamically when the login component mounts
+    useEffect(() => {
+        fetch(`${API_BASE_URL}/userinfo`)
+            .then(res => res.json())
+            .then(data => setRoles(data))
+            .catch(err => console.error("Error fetching roles: ", err));
+    }, []);
 
     const handleChange = (e) => setCredentials({ ...credentials, [e.target.name]: e.target.value });
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!credentials.email || !credentials.password) {
-            alert("Please enter both email and password.");
+        // 4. Validate that a role is selected
+        if (!credentials.role || !credentials.email || !credentials.password) {
+            alert("Please select a role and enter both email and password.");
             return;
         }
 
@@ -415,6 +428,34 @@ const LoginForm = ({ onLogin, onToggleView }) => {
             <p style={styles.subText}>Please sign in to your account and join the Astha Didi Project</p>
 
             <form onSubmit={handleSubmit}>
+                {/* --- 5. NEW ROLE DROPDOWN FIELD --- */}
+                <div style={styles.formGroup}>
+                    <div style={styles.labelContainer}>
+                        <label htmlFor="role" style={styles.label}>Select Role</label>
+                    </div>
+                    <select
+                        id="role"
+                        name="role"
+                        style={{ ...styles.input, cursor: 'pointer' }}
+                        value={credentials.role}
+                        onChange={handleChange}
+                    >
+                        <option value="" disabled>Select your role...</option>
+                        {roles.length > 0 ? (
+                            roles.map((r) => (
+                                <option key={r.UserInfoId} value={r.UserType}>{r.UserType}</option>
+                            ))
+                        ) : (
+                            <>
+                                <option value="State Super Administrator">State Super Administrator</option>
+                                <option value="District Administrator">District Administrator</option>
+                                <option value="Supervisor">Supervisor</option>
+                                <option value="Astha Didi">Astha Didi</option>
+                            </>
+                        )}
+                    </select>
+                </div>
+
                 <div style={styles.formGroup}>
                     <div style={styles.labelContainer}>
                         <label htmlFor="email" style={styles.label}>Email Address</label>

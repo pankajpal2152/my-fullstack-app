@@ -26,19 +26,19 @@ export const asthaMaaSchema = z.object({
     village: z.string().optional(),
     pinCode: z.string().regex(indianZipRegex, "Valid 6-digit Pincode required").length(6, "Must be exactly 6 digits"),
     mobileNo: z.string().regex(indianPhoneRegex, "Valid Indian phone required"),
-    email: z.string().email("Please enter a valid email address").max(100, "Max 100 characters"),
+    email: z.string().optional(), // Removed strict validation since it's readonly
     bankName: z.string().optional(),
     branchName: z.string().optional(),
     accountNo: z.string().optional(),
     ifsCode: z.string().optional(),
     panNo: z.string().optional(),
-    aadharNo: z.string().length(12, "Must be exactly 12 digits").regex(/^\d+$/, "Numbers only")
+    aadharNo: z.string().optional() // Removed strict validation since it's readonly
 });
 
 // ==========================================
 // 2. Component Definition
 // ==========================================
-const SupervisorForm = ({ onSuccess }) => {
+const AsthaMaaForm = ({ onSuccess }) => {
     const [dbStates, setDbStates] = useState([]);
     const [dbDistricts, setDbDistricts] = useState([]);
     const [profileImage, setProfileImage] = useState(DUMMY_AVATAR);
@@ -83,7 +83,7 @@ const SupervisorForm = ({ onSuccess }) => {
             reader.readAsDataURL(file);
         }
     };
-    
+
     const handleResetImage = () => {
         setProfileImage(DUMMY_AVATAR);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -141,24 +141,24 @@ const SupervisorForm = ({ onSuccess }) => {
         };
 
         try {
-            toast.loading("Saving Astha Maa data...", { toastId: 'saving' });
-            
-            const response = await fetch(`${API_BASE_URL}/supervisor`, {
+            toast.loading("Saving Astha Maa data...", { toastId: 'savingMaa' });
+
+            const response = await fetch(`${API_BASE_URL}/asthamaa`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(dbPayload)
             });
-            toast.dismiss('saving');
+            toast.dismiss('savingMaa');
 
             if (response.ok) {
                 toast.success("Success: Data saved to Database!", { position: "top-right" });
                 handleCancelAsthaMaa();
-                if(onSuccess) onSuccess(); 
+                if (onSuccess) onSuccess();
             } else {
                 toast.error("Failed to save data. Check backend logs.", { position: "top-right" });
             }
         } catch (error) {
-            toast.dismiss('saving');
+            toast.dismiss('savingMaa');
             toast.error("Network error. Could not reach server.", { position: "top-right" });
         }
     };
@@ -168,7 +168,7 @@ const SupervisorForm = ({ onSuccess }) => {
     return (
         <div style={styles.card}>
             <div style={styles.cardHeader}>
-                <h5>Supervisor Registration:-</h5>
+                <h5>Astha Maa Registration</h5>
             </div>
             <div style={styles.cardBody}>
                 <div style={styles.profileSection}>
@@ -184,7 +184,7 @@ const SupervisorForm = ({ onSuccess }) => {
                 </div>
 
                 <form onSubmit={handleSubmit(onSubmitAsthaMaa, onErrorAsthaMaa)}>
-                    <h6 style={styles.sectionHeader}>Supervisor Information</h6>
+                    <h6 style={styles.sectionHeader}>Astha Maa Information</h6>
                     <div style={styles.formGrid}>
                         <Controller name="joiningAmount" control={control} render={({ field }) => (
                             <FormInput label={<>Joining Amount <span style={{ color: '#ff3e1d' }}>*</span></>} id="joiningAmount" error={errors.joiningAmount} placeholder="Enter Amount" type="number" readOnly disabled={true} {...field} />
@@ -250,30 +250,33 @@ const SupervisorForm = ({ onSuccess }) => {
                         <Controller name="mobileNo" control={control} render={({ field }) => (
                             <FormInput label={<>Contact Number <span style={{ color: '#ff3e1d' }}>*</span></>} id="mobileNo" error={errors.mobileNo} placeholder="Mobile No." type="tel" maxLength={15} {...field} />
                         )} />
+                        
+                        {/* Read Only Email */}
                         <Controller name="email" control={control} render={({ field }) => (
-                            <FormInput label={<>Email ID <span style={{ color: '#ff3e1d' }}>*</span></>} id="email" error={errors.email} placeholder="Email ID" type="email" maxLength={100} {...field} />
+                            <FormInput label={<>Email ID</>} id="email" error={errors.email} placeholder="Read Only" type="email" maxLength={100} disabled readOnly {...field} />
                         )} />
                     </div>
 
                     <h6 style={styles.sectionHeader}>Banking & Payment Details</h6>
                     <div style={styles.formGrid}>
+                        {/* STRICTLY READONLY BANK AND ID FIELDS AS REQUESTED */}
                         <Controller name="bankName" control={control} render={({ field }) => (
-                            <FormInput label="Bank Name" id="bankName" error={errors.bankName} placeholder="Bank Name" type="text" maxLength={100} {...field} />
+                            <FormInput label="Bank Name" id="bankName" error={errors.bankName} placeholder="Read Only" type="text" maxLength={100} disabled readOnly {...field} />
                         )} />
                         <Controller name="branchName" control={control} render={({ field }) => (
-                            <FormInput label="Branch Name" id="branchName" error={errors.branchName} placeholder="Bank Branch Name" type="text" maxLength={100} {...field} />
+                            <FormInput label="Branch Name" id="branchName" error={errors.branchName} placeholder="Read Only" type="text" maxLength={100} disabled readOnly {...field} />
                         )} />
                         <Controller name="accountNo" control={control} render={({ field }) => (
-                            <FormInput label="Account No" id="accountNo" error={errors.accountNo} placeholder="Bank Ac No" type="text" maxLength={30} {...field} />
+                            <FormInput label="Account No" id="accountNo" error={errors.accountNo} placeholder="Read Only" type="text" maxLength={30} disabled readOnly {...field} />
                         )} />
                         <Controller name="ifsCode" control={control} render={({ field }) => (
-                            <FormInput label="IFS Code" id="ifsCode" error={errors.ifsCode} placeholder="Bank IFS Code" type="text" maxLength={20} {...field} />
+                            <FormInput label="IFS Code" id="ifsCode" error={errors.ifsCode} placeholder="Read Only" type="text" maxLength={20} disabled readOnly {...field} />
                         )} />
                         <Controller name="panNo" control={control} render={({ field }) => (
-                            <FormInput label="PAN No" id="panNo" error={errors.panNo} placeholder="Pan No." type="text" maxLength={10} {...field} />
+                            <FormInput label="PAN No" id="panNo" error={errors.panNo} placeholder="Read Only" type="text" maxLength={10} disabled readOnly {...field} />
                         )} />
                         <Controller name="aadharNo" control={control} render={({ field }) => (
-                            <FormInput label={<>Aadhar No. <span style={{ color: '#ff3e1d' }}>*</span></>} id="aadharNo" error={errors.aadharNo} placeholder="Aadhar No." type="text" maxLength={12} {...field} />
+                            <FormInput label={<>Aadhar No.</>} id="aadharNo" error={errors.aadharNo} placeholder="Read Only" type="text" maxLength={12} disabled readOnly {...field} />
                         )} />
                     </div>
 
@@ -287,4 +290,4 @@ const SupervisorForm = ({ onSuccess }) => {
     );
 };
 
-export default SupervisorForm;
+export default AsthaMaaForm;
